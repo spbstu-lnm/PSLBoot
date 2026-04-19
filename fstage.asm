@@ -15,9 +15,8 @@
 .code16
 .att_syntax
 
-
 .section .text
-.global _start
+.globl _start
 
 
 _start:
