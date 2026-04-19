@@ -71,3 +71,5 @@ core
 
 # Temporary assembly files
 *.tmp
+
+build/
