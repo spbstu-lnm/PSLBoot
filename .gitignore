@@ -1,0 +1,29 @@
+# Object files
+*.o
+
+# Executable binaries
+# It is recommended to output binaries into a specific folder
+/bin/
+/build/
+/target/
+
+# Listing and map files
+*.lst
+*.map
+*.out
+
+# Debug and Core dumps
+vgcore.*
+core
+*.dSYM/
+
+# Editor and OS specific files
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+.DS_Store
+
+# Temporary assembly files
+*.tmp
