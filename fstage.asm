@@ -11,12 +11,16 @@
 #
 ################################################################################
 
+
 .code16
 .att_syntax
 
-# CHECK ADDRESS ON BUILD: -Ttext 0x7C00
 
-start:
+.section .text
+.global _start
+
+
+_start:
     # ==== init
     cli
     xor %ax, %ax
@@ -44,6 +48,7 @@ start:
 
     ljmp $0x0000, $0x7E00 # passing control to Stage 2
 
+
 disk_error:
     mov $err_msg, %si
 .loop:
@@ -70,7 +75,8 @@ dap: # Disk Address Packet for int 0x13 (ah = 0x42)
 boot_drive: .byte 0
 err_msg: .asciz "Disk error!"
 
-.zero (446 - (. - start)) # padding before partition table
+
+.zero (446 - (. - _start)) # padding before partition table
 
 .zero 64    # partition table (manual filling)
 
