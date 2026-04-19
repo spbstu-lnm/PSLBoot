@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch: 
 
 jobs:
   build:
@@ -13,7 +14,14 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6.0.2
 
     - name: Build project
       run: make
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: Stage 1 build
+        path: build/
+        retention-days: 14
