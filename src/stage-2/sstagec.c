@@ -132,7 +132,7 @@ typedef struct {
 
     uint32_t l_i_reserved1; // OS dependent; Linux assumed
 
-    uint32_t i_blocks[EXT2_N_BLOCKS];
+    uint32_t i_block[EXT2_N_BLOCKS];
     
     uint32_t i_generation;
     uint32_t i_file_acl;
