@@ -14,7 +14,8 @@
 
 .text
 .globl stage2_start
-.extern stage2_main
+.globl _jump_linux
+.extern _stage2_main
 
 stage2_start:
     cli # interrupts atp will cause triple fault
@@ -44,10 +45,23 @@ protected_mode:
     mov %ax, %es
     mov %ax, %fs
     mov %ax, %gs
-    mov $0x90000, %esp
+    mov $0x70000, %esp
 
-    call stage2_main
+    call _stage2_main
     hlt
+
+_jump_linux:
+    mov 4(%esp), %eax
+    mov 8(%esp), %esi
+    mov $DATA_SEG, %dx
+    mov %dx, %ds
+    mov %dx, %es
+    mov %dx, %fs
+    mov %dx, %gs
+    mov %dx, %ss
+    mov $0x90000, %esp
+    cld
+    jmp *%eax
 
 
 # ==== GDT

@@ -66,7 +66,7 @@ hang:
 dap: # Disk Address Packet for int 0x13 (ah = 0x42)
     .byte 0x10     # struct size
     .byte 0x00     # reserved
-    .word 16       # sector amt
+    .word 127      # sector amt
     .word 0x7E00   # offset
     .word 0x0000   # segment
     .quad 1        # LBA-address
