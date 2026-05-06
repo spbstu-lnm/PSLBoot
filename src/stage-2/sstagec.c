@@ -142,6 +142,11 @@ typedef struct {
     char name[];
 } __attribute__((packed)) ext2_dirent_t;
 
+/*
+ * Transfers control to the 32-bit Linux kernel entry point.
+ * Args: entry is the kernel entry address, boot_params is the boot params address.
+ * Returns: never returns.
+ */
 extern void jump_linux(uint32_t entry, uint32_t boot_params);
 
 static ext2_super_block_t super;
@@ -152,16 +157,31 @@ static uint8_t block_buf[MAX_BLOCK_SIZE];
 static uint8_t block_buf2[MAX_BLOCK_SIZE];
 static uint8_t sector_buf[SECTOR_SIZE];
 
+/*
+ * Writes one byte to an I/O port.
+ * Args: port is the I/O port number, value is the byte to write.
+ * Returns: nothing.
+ */
 static inline void outb(uint16_t port, uint8_t value) {
     __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
 }
 
+/*
+ * Reads one byte from an I/O port.
+ * Args: port is the I/O port number.
+ * Returns: the byte read from the port.
+ */
 static inline uint8_t inb(uint16_t port) {
     uint8_t value;
     __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
     return value;
 }
 
+/*
+ * Reads words from an I/O port into memory.
+ * Args: port is the I/O port number, addr is the destination buffer, count is the word count.
+ * Returns: nothing.
+ */
 static inline void insw(uint16_t port, void *addr, uint32_t count) {
     __asm__ volatile ("cld; rep insw"
                       : "+D"(addr), "+c"(count)
@@ -169,6 +189,11 @@ static inline void insw(uint16_t port, void *addr, uint32_t count) {
                       : "memory");
 }
 
+/*
+ * Copies bytes from one memory area to another.
+ * Args: dst is the destination, src is the source, n is the byte count.
+ * Returns: dst.
+ */
 static void *memcpy(void *dst, const void *src, uint32_t n) {
     uint8_t *d = (uint8_t*)dst;
     const uint8_t *s = (const uint8_t*)src;
@@ -176,18 +201,33 @@ static void *memcpy(void *dst, const void *src, uint32_t n) {
     return dst;
 }
 
+/*
+ * Fills a memory area with a byte value.
+ * Args: dst is the destination, value is the byte value, n is the byte count.
+ * Returns: dst.
+ */
 static void *memset(void *dst, int value, uint32_t n) {
     uint8_t *d = (uint8_t*)dst;
     while (n--) *d++ = (uint8_t)value;
     return dst;
 }
 
+/*
+ * Computes the length of a null-terminated string.
+ * Args: s is the string to measure.
+ * Returns: the number of bytes before the null terminator.
+ */
 static uint32_t strlen(const char *s) {
     uint32_t n = 0;
     while (s[n]) n++;
     return n;
 }
 
+/*
+ * Compares a fixed-length name with a null-terminated string.
+ * Args: a is the fixed-length name, b is the string, n is the length of a.
+ * Returns: nonzero if a matches b exactly, otherwise zero.
+ */
 static int streqn(const char *a, const char *b, uint32_t n) {
     uint32_t i;
     for (i = 0; i < n; i++) {
@@ -196,6 +236,11 @@ static int streqn(const char *a, const char *b, uint32_t n) {
     return b[n] == 0;
 }
 
+/*
+ * Checks whether a fixed-length name starts with a prefix.
+ * Args: name is the fixed-length name, name_len is its length, prefix is the string prefix.
+ * Returns: nonzero if name starts with prefix, otherwise zero.
+ */
 static int startswith(const char *name, uint32_t name_len, const char *prefix) {
     uint32_t i = 0;
     while (prefix[i]) {
@@ -205,6 +250,11 @@ static int startswith(const char *name, uint32_t name_len, const char *prefix) {
     return 1;
 }
 
+/*
+ * Prints a string to VGA text memory and COM1.
+ * Args: s is the null-terminated string to print.
+ * Returns: nothing.
+ */
 static void puts(const char *s) {
     volatile uint16_t *vga = (volatile uint16_t*)0xB8000;
     static uint32_t pos = 0;
@@ -221,6 +271,11 @@ static void puts(const char *s) {
     }
 }
 
+/*
+ * Prints a fatal error message and halts the CPU.
+ * Args: msg is the error message to print.
+ * Returns: never returns.
+ */
 static void die(const char *msg) {
     puts("PSLBoot: ");
     puts(msg);
@@ -228,6 +283,11 @@ static void die(const char *msg) {
     for (;;) __asm__ volatile ("hlt");
 }
 
+/*
+ * Waits until the primary ATA device is no longer busy.
+ * Args: none.
+ * Returns: nothing.
+ */
 static void ata_wait_ready(void) {
     uint8_t status;
     do {
@@ -235,6 +295,11 @@ static void ata_wait_ready(void) {
     } while (status & 0x80u);
 }
 
+/*
+ * Waits until the primary ATA device is ready to transfer data.
+ * Args: none.
+ * Returns: nothing, or halts on an ATA error.
+ */
 static void ata_wait_drq(void) {
     uint8_t status;
     do {
@@ -243,6 +308,11 @@ static void ata_wait_drq(void) {
     } while ((status & 0x08u) == 0);
 }
 
+/*
+ * Reads sectors from the primary ATA disk using PIO.
+ * Args: lba is the first sector, count is the sector count, buf is the destination buffer.
+ * Returns: nothing.
+ */
 static void disk_read(uint32_t lba, uint32_t count, void *buf) {
     uint8_t *dst = (uint8_t*)buf;
 
@@ -250,6 +320,7 @@ static void disk_read(uint32_t lba, uint32_t count, void *buf) {
         uint8_t chunk = count > 255u ? 255u : (uint8_t)count;
         uint32_t i;
 
+        /* ATA PIO LBA28 read: select drive/head, sector count, LBA bytes, then command. */
         ata_wait_ready();
         outb(0x1F6, (uint8_t)(0xE0u | ((lba >> 24) & 0x0Fu)));
         outb(0x1F2, chunk);
@@ -269,23 +340,43 @@ static void disk_read(uint32_t lba, uint32_t count, void *buf) {
     }
 }
 
+/*
+ * Reads a little-endian 16-bit integer from memory.
+ * Args: p points to the first byte of the integer.
+ * Returns: the decoded 16-bit value.
+ */
 static uint16_t rd16(const void *p) {
     const uint8_t *b = (const uint8_t*)p;
     return (uint16_t)b[0] | ((uint16_t)b[1] << 8);
 }
 
+/*
+ * Reads a little-endian 32-bit integer from memory.
+ * Args: p points to the first byte of the integer.
+ * Returns: the decoded 32-bit value.
+ */
 static uint32_t rd32(const void *p) {
     const uint8_t *b = (const uint8_t*)p;
     return (uint32_t)b[0] | ((uint32_t)b[1] << 8) |
            ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
 }
 
+/*
+ * Writes a little-endian 16-bit integer to memory.
+ * Args: p points to the destination bytes, v is the value to write.
+ * Returns: nothing.
+ */
 static void wr16(void *p, uint16_t v) {
     uint8_t *b = (uint8_t*)p;
     b[0] = (uint8_t)v;
     b[1] = (uint8_t)(v >> 8);
 }
 
+/*
+ * Writes a little-endian 32-bit integer to memory.
+ * Args: p points to the destination bytes, v is the value to write.
+ * Returns: nothing.
+ */
 static void wr32(void *p, uint32_t v) {
     uint8_t *b = (uint8_t*)p;
     b[0] = (uint8_t)v;
@@ -294,11 +385,17 @@ static void wr32(void *p, uint32_t v) {
     b[3] = (uint8_t)(v >> 24);
 }
 
+/*
+ * Detects the first usable Linux partition in the MBR.
+ * Args: none.
+ * Returns: nothing.
+ */
 static void detect_partition(void) {
     uint32_t i;
     disk_read(0, 1, sector_buf);
     partition_lba = 0;
 
+    /* Keep stage 2 in the post-MBR gap; only use the table to find filesystem start. */
     for (i = 0; i < 4; i++) {
         uint8_t *p = sector_buf + MBR_PART_TABLE + i * MBR_PART_SIZE;
         uint8_t type = p[4];
@@ -312,11 +409,21 @@ static void detect_partition(void) {
     }
 }
 
+/*
+ * Reads one ext2 filesystem block from disk.
+ * Args: block_num is the ext2 block number, buf is the destination buffer.
+ * Returns: nothing.
+ */
 static void read_block(uint32_t block_num, void *buf) {
     uint32_t lba = partition_lba + (block_num * block_size) / SECTOR_SIZE;
     disk_read(lba, block_size / SECTOR_SIZE, buf);
 }
 
+/*
+ * Reads an ext2 inode by number.
+ * Args: inode_num is the ext2 inode number, inode is the destination structure.
+ * Returns: nothing.
+ */
 static void read_inode(uint32_t inode_num, ext2_inode_t *inode) {
     uint32_t group = (inode_num - 1u) / super.s_inodes_per_group;
     uint32_t index = (inode_num - 1u) % super.s_inodes_per_group;
@@ -328,11 +435,17 @@ static void read_inode(uint32_t inode_num, ext2_inode_t *inode) {
     read_block(desc_block + desc_offset / block_size, block_buf);
     bgd = (ext2_bgd_t*)(block_buf + (desc_offset % block_size));
 
+    /* Inode tables are per block group; inode numbers are globally 1-based. */
     inode_offset = index * inode_size;
     read_block(bgd->bg_inode_table + inode_offset / block_size, block_buf);
     memcpy(inode, block_buf + (inode_offset % block_size), sizeof(ext2_inode_t));
 }
 
+/*
+ * Resolves a file-relative block index to a physical ext2 block.
+ * Args: inode describes the file, file_block is the zero-based file block index.
+ * Returns: the physical block number, or zero for a sparse block.
+ */
 static uint32_t inode_block_at(const ext2_inode_t *inode, uint32_t file_block) {
     uint32_t ptrs = block_size / 4u;
     uint32_t *table;
@@ -340,6 +453,7 @@ static uint32_t inode_block_at(const ext2_inode_t *inode, uint32_t file_block) {
     if (file_block < EXT2_NDIR_BLOCKS) return inode->i_block[file_block];
     file_block -= EXT2_NDIR_BLOCKS;
 
+    /* Debian kernels and initrds commonly need single or double indirect blocks. */
     if (file_block < ptrs) {
         if (!inode->i_block[EXT2_IND_BLOCK]) return 0;
         read_block(inode->i_block[EXT2_IND_BLOCK], block_buf2);
@@ -364,6 +478,11 @@ static uint32_t inode_block_at(const ext2_inode_t *inode, uint32_t file_block) {
     return 0;
 }
 
+/*
+ * Reads a byte range from an ext2 file into memory.
+ * Args: inode describes the file, offset and size select the range, dst is the destination.
+ * Returns: nothing.
+ */
 static void read_file_range(const ext2_inode_t *inode, uint32_t offset,
                             uint32_t size, void *dst) {
     uint8_t *out = (uint8_t*)dst;
@@ -391,6 +510,11 @@ static void read_file_range(const ext2_inode_t *inode, uint32_t offset,
     }
 }
 
+/*
+ * Finds an exact file name inside an ext2 directory.
+ * Args: dir is the directory inode, name is the null-terminated name to find.
+ * Returns: the matching inode number, or zero if not found.
+ */
 static uint32_t find_in_dir(const ext2_inode_t *dir, const char *name) {
     uint32_t off = 0;
     uint32_t name_len = strlen(name);
@@ -401,6 +525,7 @@ static uint32_t find_in_dir(const ext2_inode_t *dir, const char *name) {
         if (chunk > block_size) chunk = block_size;
         read_file_range(dir, off, chunk, block_buf);
 
+        /* ext2 directory entries are variable-length records packed into file blocks. */
         while (pos + 8u <= chunk) {
             ext2_dirent_t *de = (ext2_dirent_t*)(block_buf + pos);
             if (de->rec_len == 0) die("bad ext2 dirent");
@@ -416,6 +541,11 @@ static uint32_t find_in_dir(const ext2_inode_t *dir, const char *name) {
     return 0;
 }
 
+/*
+ * Finds the first file name with a prefix inside an ext2 directory.
+ * Args: dir is the directory inode, prefix is the null-terminated prefix to find.
+ * Returns: the matching inode number, or zero if not found.
+ */
 static uint32_t find_prefixed_in_dir(const ext2_inode_t *dir, const char *prefix) {
     uint32_t off = 0;
 
@@ -439,6 +569,11 @@ static uint32_t find_prefixed_in_dir(const ext2_inode_t *dir, const char *prefix
     return 0;
 }
 
+/*
+ * Resolves an absolute ext2 path to an inode number.
+ * Args: path is the null-terminated absolute path.
+ * Returns: the inode number, or zero if not found.
+ */
 static uint32_t path_lookup(const char *path) {
     ext2_inode_t dir;
     uint32_t ino = EXT2_ROOT_INO;
@@ -450,6 +585,7 @@ static uint32_t path_lookup(const char *path) {
     while (*p) {
         char component[64];
         uint32_t n = 0;
+        /* Walk one path component at a time because ext2 has no pathname index here. */
         while (p[n] && p[n] != '/') {
             if (n + 1u >= sizeof(component)) die("path component too long");
             component[n] = p[n];
@@ -468,6 +604,11 @@ static uint32_t path_lookup(const char *path) {
     return ino;
 }
 
+/*
+ * Finds a boot file by exact path or by prefix in /boot.
+ * Args: exact is the preferred path, prefix is the fallback name prefix.
+ * Returns: the matching inode number, or zero if not found.
+ */
 static uint32_t find_boot_file(const char *exact, const char *prefix) {
     uint32_t ino = path_lookup(exact);
     uint32_t boot_ino;
@@ -485,12 +626,22 @@ static uint32_t find_boot_file(const char *exact, const char *prefix) {
     return find_prefixed_in_dir(&boot_dir, prefix);
 }
 
+/*
+ * Copies the built-in Linux command line to the boot parameter area.
+ * Args: none.
+ * Returns: nothing.
+ */
 static void copy_cmdline(void) {
     static const char cmdline[] =
         "root=/dev/sda1 ro console=tty0 console=ttyS0,115200n8";
     memcpy((void*)CMDLINE_ADDR, cmdline, sizeof(cmdline));
 }
 
+/*
+ * Loads Linux from ext2 and transfers execution to the kernel.
+ * Args: none.
+ * Returns: never returns on success.
+ */
 void stage2_main(void) {
     ext2_inode_t kernel;
     ext2_inode_t initrd;
@@ -534,6 +685,7 @@ void stage2_main(void) {
     memset(bp, 0, 4096);
     read_file_range(&kernel, 0, 4096, bp);
 
+    /* The first 4 KiB of a bzImage contains setup code plus the boot protocol header. */
     if (rd16(bp + 0x1FE) != 0xAA55u || rd32(bp + ZP_HEADER) != 0x53726448u) {
         die("bad Linux kernel header");
     }
@@ -543,6 +695,7 @@ void stage2_main(void) {
     kernel_offset = ((uint32_t)setup_sects + 1u) * SECTOR_SIZE;
     if (kernel_offset >= kernel.i_size) die("bad kernel size");
 
+    /* Load only the protected-mode payload; the setup sectors stay in boot_params. */
     puts("Loading kernel\n");
     read_file_range(&kernel, kernel_offset, kernel.i_size - kernel_offset,
                     (void*)KERNEL_LOAD_ADDR);
@@ -561,6 +714,7 @@ void stage2_main(void) {
     copy_cmdline();
     bp[ZP_TYPE_OF_LOADER] = 0xFFu;
     bp[ZP_LOADFLAGS] |= LOADED_HIGH | CAN_USE_HEAP;
+    /* These zeropage fields are the minimum Linux needs for cmdline and initrd. */
     wr16(bp + ZP_HEAP_END_PTR, 0xFE00u);
     wr32(bp + ZP_CMD_LINE_PTR, CMDLINE_ADDR);
     wr32(bp + ZP_INITRD_ADDR_MAX, 0x7FFFFFFFu);
