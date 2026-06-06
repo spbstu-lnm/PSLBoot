@@ -18,6 +18,12 @@
 .section .text
 .globl _start
 
+# Where we stash the BIOS E820 memory map for Stage 2:
+#   0x4000        : dword, number of entries
+#   0x4004 + n*20 : entries (each: u64 addr, u64 size, u32 type)
+E820_COUNT = 0x4000
+E820_ENTRIES = 0x4004
+
 
 _start:
     # ==== init
@@ -30,6 +36,9 @@ _start:
     sti
 
     mov %dl, boot_drive # saving boot drive number
+
+    # ==== collect BIOS E820 memory map (int 0x15, eax=0xE820)
+    call do_e820
 
     # ==== check extensions present
     mov $0x41, %ah
@@ -46,6 +55,44 @@ _start:
     jc disk_error
 
     ljmp $0x0000, $0x7E00 # passing control to Stage 2
+
+
+# ==== Build the E820 map at E820_ENTRIES, count at E820_COUNT.
+do_e820:
+    push %es
+    pusha
+    xor %ax, %ax
+    mov %ax, %es
+    mov $E820_ENTRIES, %di   # es:di -> destination buffer
+    xor %ebx, %ebx           # continuation = 0
+    xor %bp, %bp             # entry counter
+    mov $0x534D4150, %edx    # 'SMAP'
+    mov $0xE820, %eax
+    mov $24, %ecx
+    int $0x15
+    jc .e820_done            # carry on first call => unsupported
+    cmp $0x534D4150, %eax    # BIOS must return 'SMAP' in eax
+    jne .e820_done
+    jmp .e820_check
+.e820_loop:
+    mov $0xE820, %eax
+    mov $24, %ecx
+    int $0x15
+    jc .e820_done            # carry => end of list
+.e820_check:
+    jcxz .e820_skip          # length-0 entry => skip
+    inc %bp
+    add $20, %di             # advance to next 20-byte slot
+.e820_skip:
+    test %ebx, %ebx          # ebx == 0 => that was the last entry
+    jz .e820_done
+    jmp .e820_loop
+.e820_done:
+    movzwl %bp, %eax
+    mov %eax, (E820_COUNT)
+    popa
+    pop %es
+    ret
 
 
 disk_error:
@@ -66,7 +113,7 @@ hang:
 dap: # Disk Address Packet for int 0x13 (ah = 0x42)
     .byte 0x10     # struct size
     .byte 0x00     # reserved
-    .word 16       # sector amt
+    .word 127      # sector amt
     .word 0x7E00   # offset
     .word 0x0000   # segment
     .quad 1        # LBA-address
