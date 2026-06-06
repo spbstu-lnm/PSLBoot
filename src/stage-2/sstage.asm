@@ -59,18 +59,24 @@ _jump_linux:
     mov %dx, %fs
     mov %dx, %gs
     mov %dx, %ss
-    mov $0x90000, %esp
+    mov $0x80000, %esp
+    xor %ebp, %ebp
+    xor %edi, %edi
+    xor %ebx, %ebx
     cld
     jmp *%eax
 
 
 # ==== GDT
+# Linux 32-bit boot protocol expects __BOOT_CS = 0x10 and __BOOT_DS = 0x18.
+# So we add a dummy entry to push code to offset 0x10 and data to 0x18.
 gdt_start:
-    .quad 0 # null dsc
-gdt_code:   # Code Segment
+    .quad 0 # null dsc (0x00)
+    .quad 0 # dummy   (0x08)
+gdt_code:   # Code Segment (0x10)
     .word 0xFFFF, 0x0000
     .byte 0x00, 0b10011010, 0b11001111, 0x00
-gdt_data:   # Data Segment
+gdt_data:   # Data Segment (0x18)
     .word 0xFFFF, 0x0000
     .byte 0x00, 0b10010010, 0b11001111, 0x00
 gdt_end:
