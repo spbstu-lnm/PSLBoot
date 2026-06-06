@@ -670,6 +670,11 @@ static void copy_e820(uint8_t *bp) {
     bp[ZP_E820_ENTRIES] = (uint8_t)count;
 }
 
+/*
+ * Loads Linux from ext2 and transfers execution to the kernel.
+ * Args: none.
+ * Returns: never returns on success.
+ */
 void stage2_main(void) {
     ext2_inode_t kernel;
     ext2_inode_t initrd;
