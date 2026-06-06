@@ -42,6 +42,15 @@
 #define ZP_CMD_LINE_PTR         0x228u
 #define ZP_INITRD_ADDR_MAX      0x22Cu
 
+/* E820 memory map in the zeropage. */
+#define ZP_E820_ENTRIES         0x1E8u   /* one byte: number of entries  */
+#define ZP_E820_TABLE           0x2D0u   /* array of 20-byte e820 entries */
+#define E820_MAX_ENTRIES        128u
+
+/* Where Stage 1 stashed the BIOS map (must match fstage.asm). */
+#define E820_SRC_COUNT          0x4000u
+#define E820_SRC_ENTRIES        0x4004u
+
 #define LOADED_HIGH             0x01u
 #define CAN_USE_HEAP            0x80u
 
@@ -633,8 +642,32 @@ static uint32_t find_boot_file(const char *exact, const char *prefix) {
  */
 static void copy_cmdline(void) {
     static const char cmdline[] =
-        "root=/dev/sda1 ro console=tty0 console=ttyS0,115200n8";
+    "root=/dev/sda1 ro mem=512M console=tty0 console=ttyS0,115200n8";
     memcpy((void*)CMDLINE_ADDR, cmdline, sizeof(cmdline));
+}
+
+/*
+ * Copies the BIOS E820 memory map collected by Stage 1 into the zeropage.
+ * Args: bp is the boot params base address.
+ * Returns: nothing.
+ */
+static void copy_e820(uint8_t *bp) {
+    uint32_t count = *(volatile uint32_t*)E820_SRC_COUNT;
+
+    if (count == 0 || count > E820_MAX_ENTRIES) {
+        /* Fallback: a single conservative RAM region for QEMU (~512 MiB). */
+        uint8_t *e = bp + ZP_E820_TABLE;
+        memset(e, 0, 20);
+        wr32(e + 0, 0x00000000u);     /* base low  */
+        wr32(e + 8, 0x20000000u);     /* size low = 512 MiB */
+        wr32(e + 16, 1u);             /* type = usable RAM */
+        bp[ZP_E820_ENTRIES] = 1u;
+        return;
+    }
+
+    /* Each entry is 20 bytes: u64 addr, u64 size, u32 type. */
+    memcpy(bp + ZP_E820_TABLE, (const void*)E820_SRC_ENTRIES, count * 20u);
+    bp[ZP_E820_ENTRIES] = (uint8_t)count;
 }
 
 /*
@@ -712,6 +745,7 @@ void stage2_main(void) {
     }
 
     copy_cmdline();
+    copy_e820(bp);
     bp[ZP_TYPE_OF_LOADER] = 0xFFu;
     bp[ZP_LOADFLAGS] |= LOADED_HIGH | CAN_USE_HEAP;
     /* These zeropage fields are the minimum Linux needs for cmdline and initrd. */

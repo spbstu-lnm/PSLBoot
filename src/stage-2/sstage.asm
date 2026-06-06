@@ -8,6 +8,7 @@
 #
 #===============================================================================
 
+
 .code16
 .att_syntax
 
@@ -34,6 +35,7 @@ stage2_start:
     or $1, %eax
     mov %eax, %cr0
     ljmp $CODE_SEG, $protected_mode
+
 
 .code32
 protected_mode:
@@ -64,6 +66,7 @@ jump_linux:
     cld
     jmp *%eax
 
+
 # ==== GDT
 # Linux 32-bit boot protocol expects __BOOT_CS = 0x10 and __BOOT_DS = 0x18.
 # So we add a dummy entry to push code to offset 0x10 and data to 0x18.
@@ -81,6 +84,7 @@ gdt_end:
 gdt_descriptor:
     .word gdt_end - gdt_start - 1
     .long gdt_start
+
 
 CODE_SEG = gdt_code - gdt_start
 DATA_SEG = gdt_data - gdt_start
